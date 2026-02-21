@@ -2,6 +2,14 @@
 
 A terminal UI tool that watches a MongoDB cluster for changes and lets you rewind them — undoing inserts, updates, replaces, and deletes in reverse order.
 
+## Why?
+
+When preparing to release a new version of an application, developers often restore a copy of the production database into a test cluster to verify that everything works correctly. Depending on the size of the database, this restore process can take a significant amount of time.
+
+If something goes wrong during testing and the data needs to be in its original state to run the test again, the only option — without mongorewind — is to wait through another full restore cycle.
+
+With mongorewind, you can instantly rewind all the changes made during the test run and start over, without touching the backup or waiting for a restore.
+
 ## How it works
 
 mongorewind opens a cluster-wide [change stream](https://www.mongodb.com/docs/manual/changeStreams/) and records every data-modifying event to a local log file. When you press `R` to rewind, it applies the inverse of each recorded operation in reverse chronological order:
