@@ -1,0 +1,8 @@
+# compiled binary
+mongorewind
+
+# change log produced at runtime
+*.log
+
+# IDE / tool directories
+.claude/
