@@ -33,7 +33,7 @@ go build -o mongorewind .
 Or install directly:
 
 ```bash
-go install github.com/zelmario/mongorewind@v0.1.0
+go install github.com/zelmario/mongorewind@latest
 ```
 
 ## Usage
