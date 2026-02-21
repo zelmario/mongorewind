@@ -9,8 +9,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"mongorewind/internal/app"
-	"mongorewind/internal/enabler"
+	"github.com/zelmario/mongorewind/internal/app"
+	"github.com/zelmario/mongorewind/internal/enabler"
 )
 
 func main() {

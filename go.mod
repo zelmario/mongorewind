@@ -1,4 +1,4 @@
-module mongorewind
+module github.com/zelmario/mongorewind
 
 go 1.24.0
 

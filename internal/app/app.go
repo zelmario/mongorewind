@@ -15,9 +15,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/term"
 
-	"mongorewind/internal/enabler"
-	"mongorewind/internal/reverter"
-	"mongorewind/internal/store"
+	"github.com/zelmario/mongorewind/internal/enabler"
+	"github.com/zelmario/mongorewind/internal/reverter"
+	"github.com/zelmario/mongorewind/internal/store"
 )
 
 type collStats struct {

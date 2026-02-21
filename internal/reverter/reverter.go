@@ -7,7 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"mongorewind/internal/store"
+	"github.com/zelmario/mongorewind/internal/store"
 )
 
 type Reverter struct {
