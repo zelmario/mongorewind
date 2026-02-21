@@ -25,7 +25,7 @@ Pre-images (the document state *before* each change) are captured automatically 
 ## Installation
 
 ```bash
-git clone https://github.com/yourname/mongorewind.git
+git clone https://github.com/zelmario/mongorewind.git
 cd mongorewind
 go build -o mongorewind .
 ```
@@ -33,7 +33,7 @@ go build -o mongorewind .
 Or install directly:
 
 ```bash
-go install github.com/yourname/mongorewind@latest
+go install github.com/zelmario/mongorewind@v0.1.0
 ```
 
 ## Usage
