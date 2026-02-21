@@ -2,8 +2,6 @@
 
 A terminal UI tool that watches a MongoDB cluster for changes and lets you rewind them — undoing inserts, updates, replaces, and deletes in reverse order.
 
-![status: watching · 4 operations pending rewind]
-
 ## How it works
 
 mongorewind opens a cluster-wide [change stream](https://www.mongodb.com/docs/manual/changeStreams/) and records every data-modifying event to a local log file. When you press `R` to rewind, it applies the inverse of each recorded operation in reverse chronological order:
@@ -45,6 +43,8 @@ Flags:
   -uri string   MongoDB connection URI (default "mongodb://localhost:27017")
   -log string   Path to the on-disk change log (default "rewind.log")
 ```
+
+Run `mongorewind --help` to see all flags.
 
 ### Replica set URI
 
