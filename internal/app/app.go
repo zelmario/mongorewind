@@ -1,10 +1,13 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -34,8 +37,9 @@ type displayState struct {
 }
 
 type App struct {
-	client  *mongo.Client
-	logPath string
+	client     *mongo.Client
+	logPath    string
+	socketPath string
 
 	// mu protects all mutable fields below.
 	mu       sync.Mutex
@@ -50,6 +54,8 @@ type App struct {
 	watchCancel context.CancelFunc
 	watchDone   chan struct{}
 
+	socketListener net.Listener
+
 	// redrawCh is signalled whenever state changes. A rate-limited goroutine
 	// drains it and calls redraw() at most once per 100 ms.
 	redrawCh chan struct{}
@@ -59,11 +65,14 @@ type App struct {
 }
 
 func New(client *mongo.Client, logPath string) *App {
+	ext := filepath.Ext(logPath)
+	sp := strings.TrimSuffix(logPath, ext) + ".sock"
 	return &App{
-		client:   client,
-		logPath:  logPath,
-		stats:    make(map[string]*collStats),
-		redrawCh: make(chan struct{}, 1),
+		client:     client,
+		logPath:    logPath,
+		socketPath: sp,
+		stats:      make(map[string]*collStats),
+		redrawCh:   make(chan struct{}, 1),
 	}
 }
 
@@ -89,6 +98,7 @@ func (a *App) Run() error {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigCh
+		a.stopSocketServer()
 		term.Restore(int(os.Stdin.Fd()), oldState)
 		fmt.Print("\033[?25h\r\n") // restore cursor, move to next line
 		os.Exit(0)
@@ -96,6 +106,9 @@ func (a *App) Run() error {
 
 	if err := a.startWatching(); err != nil {
 		a.addMessage("Could not start watching: %v", err)
+	}
+	if err := a.startSocketServer(); err != nil {
+		a.addMessage("Warning: could not start IPC socket: %v", err)
 	}
 	a.redraw()
 
@@ -112,6 +125,7 @@ func (a *App) Run() error {
 			a.redraw()
 		case 'q', 'Q', 3:
 			a.stopWatching()
+			a.stopSocketServer()
 			a.outMu.Lock()
 			fmt.Print("\033[?25h\r\n") // restore cursor, move to next line
 			a.outMu.Unlock()
@@ -267,6 +281,15 @@ func (a *App) stopWatching() {
 // ── actions ───────────────────────────────────────────────────────────────────
 
 func (a *App) doRewind() {
+	if err := a.executeRewind(); err != nil {
+		a.addMessage("Rewind error: %v", err)
+	}
+	a.redraw()
+}
+
+// executeRewind performs the rewind and returns any error. Safe to call from
+// both the keyboard handler and the IPC socket handler.
+func (a *App) executeRewind() error {
 	a.stopWatching()
 
 	a.mu.Lock()
@@ -279,8 +302,7 @@ func (a *App) doRewind() {
 		if err := a.startWatching(); err != nil {
 			a.addMessage("Error resuming watch: %v", err)
 		}
-		a.redraw()
-		return
+		return nil
 	}
 
 	a.addMessage("Reverting %d operation(s)...", len(snapshot))
@@ -288,24 +310,27 @@ func (a *App) doRewind() {
 
 	r := reverter.New(a.client)
 	if err := r.Rewind(context.Background(), snapshot); err != nil {
-		a.addMessage("Rewind error: %v", err)
-	} else {
-		a.addMessage("Reverted: %s", rewindSummary(snapshot))
-
-		a.mu.Lock()
-		a.entries = nil
-		a.stats = make(map[string]*collStats)
-		a.mu.Unlock()
-
-		a.logFile.Truncate(0)
-		a.logFile.Seek(0, 0)
-		a.writer = store.NewWriter(a.logFile)
+		if startErr := a.startWatching(); startErr != nil {
+			a.addMessage("Error resuming watch: %v", startErr)
+		}
+		return err
 	}
+
+	a.addMessage("Reverted: %s", rewindSummary(snapshot))
+
+	a.mu.Lock()
+	a.entries = nil
+	a.stats = make(map[string]*collStats)
+	a.mu.Unlock()
+
+	a.logFile.Truncate(0)
+	a.logFile.Seek(0, 0)
+	a.writer = store.NewWriter(a.logFile)
 
 	if err := a.startWatching(); err != nil {
 		a.addMessage("Error resuming watch: %v", err)
 	}
-	a.redraw()
+	return nil
 }
 
 func (a *App) clearLog() {
@@ -320,6 +345,51 @@ func (a *App) clearLog() {
 	a.writer = store.NewWriter(a.logFile)
 
 	a.addMessage("Cleared %d operation(s).", count)
+}
+
+// ── IPC socket server ─────────────────────────────────────────────────────────
+
+func (a *App) startSocketServer() error {
+	os.Remove(a.socketPath) // remove stale socket from a previous run
+	ln, err := net.Listen("unix", a.socketPath)
+	if err != nil {
+		return err
+	}
+	a.socketListener = ln
+
+	go func() {
+		defer os.Remove(a.socketPath)
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return // listener was closed
+			}
+			go a.handleSocketConn(conn)
+		}
+	}()
+	return nil
+}
+
+func (a *App) stopSocketServer() {
+	if a.socketListener != nil {
+		a.socketListener.Close()
+	}
+}
+
+func (a *App) handleSocketConn(conn net.Conn) {
+	defer conn.Close()
+	scanner := bufio.NewScanner(conn)
+	for scanner.Scan() {
+		switch strings.TrimSpace(scanner.Text()) {
+		case "rewind":
+			if err := a.executeRewind(); err != nil {
+				fmt.Fprintf(conn, "err: %v\n", err)
+			} else {
+				fmt.Fprintln(conn, "ok")
+			}
+			a.redraw()
+		}
+	}
 }
 
 // ── rendering ─────────────────────────────────────────────────────────────────

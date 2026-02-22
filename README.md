@@ -70,6 +70,31 @@ mongorewind --uri "mongodb://host1:27017,host2:27017,host3:27017/?replicaSet=rs0
 | `C` | Clear — discard the recorded log without rewinding |
 | `Q` / `Ctrl-C` | Quit |
 
+### CI / non-interactive rewind
+
+Run `mongorewind --rewind` from any shell or script to trigger a rewind in the already-running instance and wait for it to complete:
+
+```bash
+# start the watcher (e.g. as a background service or in another terminal)
+mongorewind --uri "mongodb://..." &
+
+# run your test suite
+run_tests
+
+# rewind all changes and run again
+mongorewind --rewind
+run_tests
+```
+
+`mongorewind --rewind` exits with code `0` on success and `1` on error, so it integrates naturally into CI pipelines.
+
+If you use a custom `--log` path, pass the same value to `--rewind` so it finds the correct socket:
+
+```bash
+mongorewind --log /tmp/mytest.log --uri "mongodb://..." &
+mongorewind --log /tmp/mytest.log --rewind
+```
+
 ## Display
 
 ```
