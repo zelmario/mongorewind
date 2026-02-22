@@ -23,13 +23,21 @@ func main() {
 	rewind := flag.Bool("rewind", false, "Send a rewind command to a running mongorewind instance and exit")
 	flag.Parse()
 
+	sp := socketPath(*logFile)
+
 	if *rewind {
-		sp := socketPath(*logFile)
 		if err := sendRewind(sp); err != nil {
 			log.Fatalf("rewind: %v", err)
 		}
 		fmt.Println("[mongorewind] Rewind complete.")
 		return
+	}
+
+	// Single-instance guard: if the socket is already connectable, another
+	// instance is running with the same log file.
+	if conn, err := net.Dial("unix", sp); err == nil {
+		conn.Close()
+		log.Fatalf("mongorewind is already running (socket: %s)\nUse --rewind to trigger a rewind in the running instance.", sp)
 	}
 
 	ctx := context.Background()

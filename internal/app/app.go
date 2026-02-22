@@ -108,7 +108,7 @@ func (a *App) Run() error {
 		a.addMessage("Could not start watching: %v", err)
 	}
 	if err := a.startSocketServer(); err != nil {
-		a.addMessage("Warning: could not start IPC socket: %v", err)
+		return fmt.Errorf("start IPC socket: %w", err)
 	}
 	a.redraw()
 
